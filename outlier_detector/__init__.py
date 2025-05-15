@@ -1,1 +1,1 @@
-from .outlier_detection import *
+from .outlier_detector import *
