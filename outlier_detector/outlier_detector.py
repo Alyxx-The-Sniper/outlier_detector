@@ -519,42 +519,42 @@ def detect_outliers_all_method(df,X,
     return df_result, outliers_df
 
 ######## Dimension Reduction Techniques ##############
-def detect_outliers_pca(X, n_components=2, method='percentile', threshold=95, visualize=True): 
-
+def detect_outliers_pca(df, x, n_components=2, method='percentile', threshold=95, visualize=True):
     """
-    Detects outliers using PCA reconstruction error with percentile, Z-score, or IQR thresholding.
+    Detects outliers using PCA reconstruction error with support for percentile, Z-score, or IQR thresholding.
 
     Parameters:
-        X (pd.DataFrame): Input DataFrame with numeric features.
-        n_components (int): Number of PCA components (2 or 3 for visualization).
-        method (str): 'percentile', 'zscore', or 'iqr' for outlier detection strategy.
-        
-    
-        threshold (float): Threshold for outlier detection:
-                           - Percentile (e.g. 95)
-                           - Z-score cutoff (e.g. 3)
+        df (pd.DataFrame): Original DataFrame (used to return outlier rows).
+        x (pd.DataFrame or np.ndarray): Numeric features for PCA and outlier detection.
+        n_components (int): Number of PCA components (2 or 3 recommended for visualization).
+        method (str): Outlier detection strategy. Choose from:
+                      - 'percentile' (default): based on reconstruction error percentile
+                      - 'zscore': based on Z-score
+                      - 'iqr': based on interquartile range
+        threshold (float): Threshold value used for:
+                           - Percentile (e.g., 95)
+                           - Z-score (e.g., 3)
                            - Not used for IQR (uses 1.5 * IQR internally)
-                           
-                           
-        visualize (bool): Whether to show a 2D/3D PCA plot.
+        visualize (bool): If True, displays a 2D or 3D PCA plot with inliers and outliers.
 
     Returns:
-        outliers_df (pd.DataFrame): Outlier rows from X.
-        visualization (np.ndarray): PCA-transformed values.
+        outliers_df (pd.DataFrame): Rows from `df` identified as outliers.
+        X_pca (np.ndarray): PCA-transformed values (2D or 3D).
     """
-    # Standardize
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
 
-    # PCA
+    # Standardize features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(x)
+
+    # Apply PCA
     pca = PCA(n_components=n_components)
     X_pca = pca.fit_transform(X_scaled)
     X_projected = pca.inverse_transform(X_pca)
 
-    # Reconstruction error
+    # Compute reconstruction error
     reconstruction_error = np.mean((X_scaled - X_projected) ** 2, axis=1)
 
-    # Outlier detection method
+    # Determine outliers
     if method == 'percentile':
         cutoff = np.percentile(reconstruction_error, threshold)
         outliers = reconstruction_error > cutoff
@@ -568,9 +568,9 @@ def detect_outliers_pca(X, n_components=2, method='percentile', threshold=95, vi
         upper_bound = Q3 + 1.5 * IQR
         outliers = reconstruction_error > upper_bound
     else:
-        raise ValueError("method must be 'percentile', 'zscore', or 'iqr'")
+        raise ValueError("`method` must be one of: 'percentile', 'zscore', or 'iqr'.")
 
-    # Visualization (optional)
+    # Visualization
     if visualize:
         fig = plt.figure()
         if n_components == 3:
@@ -583,13 +583,16 @@ def detect_outliers_pca(X, n_components=2, method='percentile', threshold=95, vi
             plt.scatter(X_pca[outliers, 0], X_pca[outliers, 1], c='red', label='Outliers')
             plt.title("2D PCA-based Outlier Detection")
         else:
-            raise ValueError("Visualization only supported for 2 or 3 PCA components.")
+            raise ValueError("Visualization is only supported for 2 or 3 PCA components.")
         plt.legend()
         plt.show()
 
-    outliers_df = X[outliers]
+    outliers_df = df[outliers]
 
-    return outliers_df
+    return outliers_df, X_pca
+
+
+
 def detect_outliers_pca_all_method(df, X, methods=["isolation_forest"], ndim=2, visualize=True, **kwargs):
     result_df = df.copy()
     X_scaled = StandardScaler().fit_transform(X)
