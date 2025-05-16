@@ -577,11 +577,11 @@ def detect_outliers_pca(df, x, n_components=2, method='percentile', threshold=95
             ax = fig.add_subplot(111, projection='3d')
             ax.scatter(X_pca[~outliers, 0], X_pca[~outliers, 1], X_pca[~outliers, 2], c='blue', label='Inliers')
             ax.scatter(X_pca[outliers, 0], X_pca[outliers, 1], X_pca[outliers, 2], c='red', label='Outliers')
-            ax.set_title("3D PCA-based Outlier Detection")
+            ax.set_title(f"3D PCA-based Outlier Detection ({method})")
         elif n_components == 2:
             plt.scatter(X_pca[~outliers, 0], X_pca[~outliers, 1], c='blue', label='Inliers')
             plt.scatter(X_pca[outliers, 0], X_pca[outliers, 1], c='red', label='Outliers')
-            plt.title("2D PCA-based Outlier Detection")
+            plt.title(f"2D PCA-based Outlier Detection ({method})")
         else:
             raise ValueError("Visualization is only supported for 2 or 3 PCA components.")
         plt.legend()
