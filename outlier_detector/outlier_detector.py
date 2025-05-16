@@ -129,7 +129,7 @@ from scipy.stats import zscore
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def detect_outliers_with_summary(df, method='IQR'):
+def detect_outliers_IQR_Zscore(df, method='IQR'):
     """
     Detects outliers in a DataFrame using IQR or Z-score.
     Returns outlier rows, summary of counts per feature, and optionally shows plots.
