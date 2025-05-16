@@ -24,6 +24,104 @@ from sklearn.manifold import TSNE
 import umap
 
 
+##### histogram/boxplot/violin plot #######
+
+def plot_histogram(df: pd.DataFrame,
+                               class_col: str,
+                               class_val,
+                               features,
+                               bins: int = 10):
+    """
+    Plot overlapping histograms with KDE for only the specified classes
+    in class_val, for each feature in features.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame.
+    class_col : str
+        Name of the column containing class labels.
+    class_val : str or list of str
+        One or more class labels to include (e.g. ['Bream', 'Smelt']).
+    features : str or list of str
+        Feature name or list of feature names to plot.
+    bins : int, optional
+        Number of bins for the histogram (default is 10).
+    """
+    # Normalize inputs
+    if isinstance(class_val, str):
+        class_val = [class_val]
+    if isinstance(features, str):
+        features = [features]
+
+    # Filter to only the desired classes
+    df_sub = df[df[class_col].isin(class_val)]
+
+    for feat in features:
+        plt.figure(figsize=(8, 6))
+        sns.histplot(
+            data=df_sub,
+            x=feat,
+            hue=class_col,
+            bins=bins,
+            kde=True,
+            element="step",
+            stat="density",
+            common_norm=False,
+            alpha=0.4
+        )
+        plt.title(f'Overlapping distributions of {feat} for {class_val}')
+        plt.xlabel(feat)
+        plt.ylabel('Density')
+        plt.tight_layout()
+        plt.show()
+def plot_boxplots(df: pd.DataFrame,
+                  class_col: str,
+                  class_val,
+                  features):
+    """
+    Plot a boxplot for each feature in `features`, restricted to rows
+    where df[class_col] == class_val, using Seaborn.
+    """
+    if isinstance(features, str):
+        features = [features]
+
+    sub_df = df[df[class_col] == class_val]
+    for feat in features:
+        plt.figure(figsize=(4, 6))
+        sns.boxplot(y=sub_df[feat])
+        plt.title(f'Boxplot of {feat} for {class_val}')
+        plt.ylabel(feat)
+        plt.tight_layout()
+        plt.show()
+def plot_distributions(df, features):
+    """
+    Plots violin + box + strip plots for each feature in `features` from DataFrame `df`.
+    """
+    sns.set(style="whitegrid")
+    n = len(features)
+    fig, axes = plt.subplots(1, n, figsize=(5 * n, 6))
+    if n == 1:
+        axes = [axes]
+
+    fig.suptitle(f"Distribution of: {', '.join(features)}", fontsize=20)
+
+    for ax, feat in zip(axes, features):
+        sns.violinplot(y=df[feat], ax=ax, inner=None, color="lightblue")
+        sns.boxplot(
+            y=df[feat], ax=ax, width=0.2,
+            boxprops={"facecolor": "white", "edgecolor": "black"},
+            medianprops={"color": "red"},
+            whiskerprops={"color": "black"},
+            capprops={"color": "black"}
+        )
+        sns.stripplot(y=df[feat], ax=ax, color="green", size=5, jitter=True, alpha=0.5)
+        ax.set_xlabel(feat)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
+
+
 ######## Outliers detectors ###############
 def detect_outliers_IQR_Zscore(df, method='IQR'):
     """
