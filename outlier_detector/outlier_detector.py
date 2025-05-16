@@ -122,6 +122,59 @@ def plot_distributions(df, features):
     plt.show()
 
 
+
+import pandas as pd
+import numpy as np
+from scipy.stats import zscore
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def detect_outliers_with_summary(df, method='IQR'):
+    """
+    Detects outliers in a DataFrame using IQR or Z-score.
+    Returns outlier rows, summary of counts per feature, and optionally shows plots.
+
+    Parameters:
+        df (pd.DataFrame): A numeric subset of the full dataset (e.g., one class).
+        method (str): 'IQR' or 'Z-score'.
+        plot (bool): Whether to show annotated plots for each feature.
+
+    Returns:
+        outliers_df (pd.DataFrame): Rows identified as outliers.
+        outlier_summary (pd.DataFrame): Count of outliers per feature.
+    """
+    df_subset = df.copy()
+    numeric_cols = df_subset.select_dtypes(include=np.number).columns
+
+    outlier_mask = pd.Series(False, index=df_subset.index)
+    outlier_counts = {}
+
+    for col in numeric_cols:
+        if method.upper() == 'IQR':
+            Q1 = df_subset[col].quantile(0.25)
+            Q3 = df_subset[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower = Q1 - 1.5 * IQR
+            upper = Q3 + 1.5 * IQR
+            outliers = (df_subset[col] < lower) | (df_subset[col] > upper)
+        elif method.upper() == 'Z-SCORE':
+            col_z = zscore(df_subset[col], nan_policy='omit')
+            outliers = np.abs(col_z) > 3
+        else:
+            raise ValueError("Method must be either 'IQR' or 'Z-score'")
+
+        outlier_mask |= outliers
+        outlier_counts[col] = outliers.sum()      
+
+    # Create summary DataFrame
+    outlier_summary = pd.DataFrame({
+        'Feature': list(outlier_counts.keys()),
+        'Outlier_Count': list(outlier_counts.values())
+    })
+
+    return df_subset[outlier_mask], outlier_summary
+
+
 ######## Outliers detectors ###############
 def detect_outliers_IQR_Zscore(df, method='IQR'):
     """
