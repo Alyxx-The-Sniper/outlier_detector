@@ -549,19 +549,15 @@ def detect_outliers_pca(df, x, n_components=2, method='percentile', threshold=95
         df (pd.DataFrame): Original DataFrame (used to return outlier rows).
         x (pd.DataFrame or np.ndarray): Numeric features for PCA and outlier detection.
         n_components (int): Number of PCA components (2 or 3 recommended for visualization).
-        method (str): Outlier detection strategy. Choose from:
-                      - 'percentile' (default): based on reconstruction error percentile
-                      - 'zscore': based on Z-score
-                      - 'iqr': based on interquartile range
-        threshold (float): Threshold value used for:
-                           - Percentile (e.g., 95)
-                           - Z-score (e.g., 3)
-                           - Not used for IQR (uses 1.5 * IQR internally)
-        visualize (bool): If True, displays a 2D or 3D PCA plot with inliers and outliers.
+        method (str): Outlier detection strategy: 'percentile', 'zscore', or 'iqr'.
+        threshold (float): Threshold value for 'percentile' or 'zscore'. Not used for 'iqr'.
+        visualize (bool): If True, shows PCA scatterplot with outliers marked.
 
     Returns:
         outliers_df (pd.DataFrame): Rows from `df` identified as outliers.
-        X_pca (np.ndarray): PCA-transformed values (2D or 3D).
+        X_pca (np.ndarray): PCA-transformed values.
+        explained_ratios (list): Explained variance ratio of the selected components.
+        pc_labels (list): List of component labels, e.g., ['PC1', 'PC2'].
     """
 
     # Standardize features
@@ -572,6 +568,15 @@ def detect_outliers_pca(df, x, n_components=2, method='percentile', threshold=95
     pca = PCA(n_components=n_components)
     X_pca = pca.fit_transform(X_scaled)
     X_projected = pca.inverse_transform(X_pca)
+
+    # Get explained variance ratio
+    explained_ratios = pca.explained_variance_ratio_
+    pc_labels = [f'PC{i+1}' for i in range(n_components)]
+
+    # Print explained variance ratios
+    print("Explained Variance Ratio:")
+    for i, ratio in enumerate(explained_ratios):
+        print(f"{pc_labels[i]}: {ratio:.2%}")
 
     # Compute reconstruction error
     reconstruction_error = np.mean((X_scaled - X_projected) ** 2, axis=1)
@@ -606,12 +611,14 @@ def detect_outliers_pca(df, x, n_components=2, method='percentile', threshold=95
             plt.title(f"2D PCA-based Outlier Detection ({method})")
         else:
             raise ValueError("Visualization is only supported for 2 or 3 PCA components.")
+        plt.xlabel(pc_labels[0])
+        plt.ylabel(pc_labels[1])
         plt.legend()
         plt.show()
 
     outliers_df = df[outliers]
 
-    return outliers_df, X_pca
+    return outliers_df, X_pca, explained_ratios.tolist(), pc_labels
 
 
 
@@ -622,6 +629,15 @@ def detect_outliers_pca_all_method(df, X, methods=["isolation_forest"], ndim=2, 
     # PCA transformation
     pca = PCA(n_components=ndim)
     X_pca = pca.fit_transform(X_scaled)
+
+    # Explained variance ratio
+    explained_ratios = pca.explained_variance_ratio_
+    pc_labels = [f'PC{i+1}' for i in range(ndim)]
+
+    # Print explained variance ratios
+    print("Explained Variance Ratio:")
+    for i, ratio in enumerate(explained_ratios):
+        print(f"{pc_labels[i]}: {ratio:.2%}")
 
     outlier_flags = []
 
@@ -709,7 +725,11 @@ def detect_outliers_pca_all_method(df, X, methods=["isolation_forest"], ndim=2, 
             ax.legend()
             plt.show()
 
-    return outliers_df
+    return outliers_df, X_pca, explained_ratios.tolist(), pc_labels
+
+
+
+
 def tsne_visualize(df, x, n_components=2, perplexity=30, random_state=42):
     """
     Standardizes the features and visualizes data using t-SNE in 2D or 3D.
