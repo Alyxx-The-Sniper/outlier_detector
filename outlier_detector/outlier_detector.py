@@ -146,21 +146,22 @@ def plot_distributions(df, features):
 
 
 ######## Outliers detectors ###############
-def detect_outliers_IQR_Zscore(df, method='IQR'):
+
+def detect_outliers_IQR_Zscore2(df, method='IQR'):
     """
     Detects outliers in a DataFrame using IQR or Z-score.
     Returns:
-        - a combined DataFrame of outlier rows per feature (with multi-index),
-        - a combined DataFrame of all outlier rows (deduplicated),
+        - a combined DataFrame of outliers by feature (with multi-index),
+        - a DataFrame with an added 'outlier_flag' column indicating outliers in any feature,
         - a summary DataFrame of outlier counts per feature.
 
     Parameters:
         df (pd.DataFrame): A numeric subset of the full dataset (e.g., one class).
-        method (str): 'IQR' or 'Z-score'.
+        method (str): 'IQR' or 'Z-score'. The method to detect outliers.
 
     Returns:
-        outliers_by_feature_df (pd.DataFrame): Multi-index DataFrame of outliers per feature.
-        combined_outliers_df (pd.DataFrame): Unique rows that are outliers in any feature.
+        outliers_by_features (pd.DataFrame): Multi-index DataFrame of outliers per feature.
+        df_with_outliers_flag (pd.DataFrame): The original DataFrame with an 'outlier_flag' column.
         outlier_summary (pd.DataFrame): Count of outliers per feature.
     """
     
@@ -190,22 +191,27 @@ def detect_outliers_IQR_Zscore(df, method='IQR'):
         outlier_mask |= outliers
 
     # Combine all outliers per feature into a multi-index DataFrame
-    outliers_by_feature_df = pd.concat(
+    outliers_by_features = pd.concat(
         outliers_by_feature.values(),
         keys=outliers_by_feature.keys(),
         names=["Feature", "Index"]
     )
 
-    # Get deduplicated combined outliers
-    combined_outliers_df = df_subset[outlier_mask].drop_duplicates()
+    # Add a column in the original dataframe to flag outliers
+    df_with_outliers_flag = df_subset.copy()
+    df_with_outliers_flag['outlier_flag'] = outlier_mask
 
-    # Create summary
+    # Create summary of outlier counts per feature
     outlier_summary = pd.DataFrame({
         'Feature': list(outlier_counts.keys()),
         'Outlier_Count': list(outlier_counts.values())
     })
 
-    return outliers_by_feature_df, combined_outliers_df, outlier_summary
+    return outliers_by_features, df_with_outliers_flag, outlier_summary
+
+
+
+
 def detect_outliers_isolation_forest(df, X, contamination=0.1, random_state=42):
     """
     Detect outliers in a DataFrame using Isolation Forest.
