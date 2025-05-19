@@ -147,7 +147,7 @@ def plot_distributions(df, features):
 
 ######## Outliers detectors ###############
 
-def detect_outliers_IQR_Zscore2(df, method='IQR'):
+def detect_outliers_IQR_Zscore(df, method='IQR'):
     """
     Detects outliers in a DataFrame using IQR or Z-score.
     Returns:
