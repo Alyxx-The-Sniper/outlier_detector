@@ -556,84 +556,93 @@ def detect_outliers_all_method(
 
 #########################################################
 
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
-# Optional UMAP
-try:
-    import umap
-except ImportError:
-    umap = None
-
 def plot_outliers_all_method(
-    df: pd.DataFrame,
-    outlier_vote_threshold: int | None = 2,
-    method: str      = 'PCA',    # 'PCA' or 'UMAP'
-    n_components: int = 2,       # 2 or 3
-    figsize: tuple   = (8,6)
+    df_out: pd.DataFrame,
+    outlier_vote_threshold: int,
+    method: str = 'PCA',           # 'PCA' or 'UMAP'
+    n_components: int = 2,         # 2 or 3
+    figsize: tuple = (8,6),
+    # UMAP hyperparameters (only used when method='UMAP')
+    umap_n_neighbors: int = 15,
+    umap_min_dist: float = 0.1,
+    umap_metric: str = 'euclidean',
+    umap_kwargs: dict = None       # any other UMAP params
 ):
     """
-    Project df into 2D/3D via PCA or UMAP and color by outlier/inlier.
-    
-    Parameters:
-      df: DataFrame of features + either:
-           - a boolean 'outlier_flag' column (if threshold is None), or
-           - a numeric 'Votes' column plus ISO/LOF/OCSVM/DBSCAN/AE/Consensus flags.
-      outlier_vote_threshold: if int, use df['Votes'] >= this;
-                              if None, use df['outlier_flag'] == True.
-      method: 'PCA' or 'UMAP'
-      n_components: 2 or 3
-      figsize: matplotlib figure size
-    """
-    df = df.copy()
-    
-    # decide which mask to use
-    if outlier_vote_threshold is None:
-        if 'outlier_flag' not in df.columns:
-            raise ValueError("When threshold=None, df must have an 'outlier_flag' column.")
-        is_out = df['outlier_flag'].astype(bool)
-        drop_cols = ['outlier_flag']
-    else:
-        if 'Votes' not in df.columns:
-            raise ValueError("When threshold is an int, df must have a 'Votes' column.")
-        is_out = df['Votes'] >= outlier_vote_threshold
-        # drop all of your detector flags so only raw features remain
-        drop_cols = ['ISO','LOF','OCSVM','DBSCAN','AE','Votes','Consensus']
-    
-    # 1) Build the feature matrix
-    X = df.drop(columns=drop_cols, errors='ignore').values
+    Plots inliers vs. outliers after dimensionality reduction.
 
-    # 2) Choose projector
+    Parameters
+    ----------
+    df_out : pd.DataFrame
+        DataFrame containing feature columns plus flag columns 
+        ['ISO','LOF','OCSVM','DBSCAN','AE','Votes','Consensus'].
+    outlier_vote_threshold : int
+        Minimum number of votes to call a point an outlier.
+    method : str, default='PCA'
+        Dimensionality reduction method: 'PCA' or 'UMAP'.
+    n_components : int, default=2
+        Number of embedding dimensions (2 or 3).
+    figsize : tuple, default=(8,6)
+        Figure size for the plot.
+    umap_n_neighbors : int, default=15
+        The size of local neighborhood (in terms of number of neighboring sample points) used for manifold approximation.
+    umap_min_dist : float, default=0.1
+        The effective minimum distance between embedded points.
+    umap_metric : str, default='euclidean'
+        The metric to use for distance computation.
+    umap_kwargs : dict, optional
+        Any additional arguments to pass to `umap.UMAP()`.
+    """
+    flag_cols = ['ISO','LOF','OCSVM','DBSCAN','AE','Votes','Consensus']
+
+    # 1) Prepare feature matrix
+    feature_df = df_out.drop(columns=flag_cols)
+    X = feature_df.values
+
+    # 2) Dimensionality reduction
     method = method.upper()
     if method == 'PCA':
-        projector = PCA(n_components=n_components, random_state=42)
+        dr = PCA(n_components=n_components, random_state=42)
+
     elif method == 'UMAP':
         if umap is None:
-            raise ImportError("Install umap-learn to use UMAP")
-        projector = umap.UMAP(n_components=n_components, random_state=42)
+            raise ImportError("Please install umap-learn to use UMAP")
+
+        # build full set of UMAP parameters
+        umap_params = {
+            'n_components': n_components,
+            'n_neighbors': umap_n_neighbors,
+            'min_dist': umap_min_dist,
+            'metric': umap_metric,
+            'random_state': 42
+        }
+        # merge any extra kwargs, if provided
+        if umap_kwargs:
+            umap_params.update(umap_kwargs)
+
+        dr = umap.UMAP(**umap_params)
+
     else:
         raise ValueError("method must be 'PCA' or 'UMAP'")
 
-    X_red = projector.fit_transform(X)
+    X_red = dr.fit_transform(X)
 
-    # 3) Plot
+    # 3) Identify outliers
+    is_out = df_out['Votes'] >= outlier_vote_threshold
+
+    # 4) Plot
     if n_components == 2:
         plt.figure(figsize=figsize)
-        plt.scatter(
-            X_red[~is_out,0], X_red[~is_out,1],
-            label='Inliers', alpha=0.6
-        )
-        plt.scatter(
-            X_red[ is_out,0], X_red[ is_out,1],
-            label='Outliers', alpha=0.6, color='r'
-        )
+        plt.scatter(X_red[~is_out,0], X_red[~is_out,1],
+                    label='Inliers', alpha=0.6)
+        plt.scatter(X_red[ is_out,0], X_red[ is_out,1],
+                    label='Outliers', alpha=0.6, color='r')
         plt.xlabel('Component 1')
         plt.ylabel('Component 2')
 
     elif n_components == 3:
-        from mpl_toolkits.mplot3d import Axes3D  # noqa F401
         fig = plt.figure(figsize=figsize)
-        ax  = fig.add_subplot(111, projection='3d')
+        ax = fig.add_subplot(111, projection='3d')
         ax.scatter(
             X_red[~is_out,0], X_red[~is_out,1], X_red[~is_out,2],
             label='Inliers', alpha=0.6
@@ -645,6 +654,7 @@ def plot_outliers_all_method(
         ax.set_xlabel('Component 1')
         ax.set_ylabel('Component 2')
         ax.set_zlabel('Component 3')
+
     else:
         raise ValueError("n_components must be 2 or 3")
 
@@ -652,7 +662,6 @@ def plot_outliers_all_method(
     plt.legend()
     plt.tight_layout()
     plt.show()
-
 
 
 
