@@ -556,7 +556,7 @@ def detect_outliers_all_method(
 
 #########################################################
 
-def plot_outliers(
+def plot_outliers_all_method(
     df_out: pd.DataFrame,
     outlier_vote_threshold: int,
     method: str = 'PCA',    # 'PCA' or 'UMAP'
