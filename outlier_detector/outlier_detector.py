@@ -525,7 +525,7 @@ def detect_outliers_all_method(
 
     # 7) Autoencoder
     np.random.seed(ae_seed)
-    tf_set_seed(ae_seed)
+    tf.random.set_seed(ae_seed)
     input_dim         = X_scaled.shape[1]
     ae = Sequential([
         Dense(ae_encoding_dim_1, activation='relu', input_dim=input_dim),
