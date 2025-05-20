@@ -1,6 +1,7 @@
 ## Code Collection for Outliers Detection
 
 ############ libraries needed #################
+from unittest import result
 import warnings
 warnings.filterwarnings('ignore')
 import pandas as pd
@@ -467,51 +468,65 @@ def detect_outliers_autoencoder(
     outliers_df = df_with_labels[df_with_labels['Autoencoder_Outlier'] == -1]
 
     return df_with_labels, outliers_df
-def detect_outliers_all_method(df,X,
-    random_state=42,
-    contamination=0.1,
-    lof_n_neighbors=20,
-    ocsvm_nu=0.1,
-    ocsvm_kernel="rbf",
-    ocsvm_gamma="scale",
-    dbscan_eps=0.5,
-    dbscan_min_samples=5,
-    ae_encoding_dim_1=64,
-    ae_encoding_dim_2=32,
-    ae_epochs=50,
-    ae_batch_size=32,
-    ae_seed=42,
-    ae_verbose=0
-):
 
-    # 1. Standardize
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    df_result = df.copy()
 
-    # 2. Isolation Forest
-    iso = IsolationForest(contamination=contamination, random_state=random_state)
-    df_result['ISO_Outlier'] = iso.fit_predict(X_scaled)
+def detect_outliers_all_method(
+    X_df: pd.DataFrame,
+    random_state: int      = 42,
+    contamination: float   = 0.1,
+    lof_n_neighbors: int   = 20,
+    ocsvm_nu: float        = 0.1,
+    ocsvm_kernel: str      = "rbf",
+    ocsvm_gamma: str       = "scale",
+    dbscan_eps: float      = 0.5,
+    dbscan_min_samples: int= 5,
+    ae_encoding_dim_1: int = 64,
+    ae_encoding_dim_2: int = 32,
+    ae_epochs: int         = 50,
+    ae_batch_size: int     = 32,
+    ae_seed: int           = 42,
+    ae_verbose: int        = 0
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Run seven outlier-detection steps on the numeric columns of X_df,
+    append flags back onto X_df, and return:
+      1) the full DataFrame with flags
+      2) the subset of only consensus outliers
+    """
+    # 1) extract and standardize numeric features
+    feature_cols   = X_df.select_dtypes(include=[np.number]).columns
+    X              = X_df[feature_cols].values
+    scaler         = StandardScaler()
+    X_scaled       = scaler.fit_transform(X)
 
-    # 3. LOF
-    lof = LocalOutlierFactor(n_neighbors=lof_n_neighbors, contamination=contamination)
-    df_result['LOF_Outlier'] = lof.fit_predict(X_scaled)
+    # 2) prepare the output DataFrame
+    df_out         = X_df.copy()
 
-    # 4. One-Class SVM
-    ocsvm = OneClassSVM(nu=ocsvm_nu, kernel=ocsvm_kernel, gamma=ocsvm_gamma)
-    df_result['OCSVM_Outlier'] = ocsvm.fit_predict(X_scaled)
+    # 3) Isolation Forest
+    iso            = IsolationForest(contamination=contamination,
+                                     random_state=random_state)
+    df_out['ISO']  = iso.fit_predict(X_scaled)
 
-    # 5. DBSCAN
-    db = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples)
-    df_result['DBSCAN_Cluster'] = db.fit_predict(X_scaled)
-#     df_result['DBSCAN_Outlier'] = np.where(df_result['DBSCAN_Cluster'] == -1, -1, 1)
+    # 4) LOF
+    lof               = LocalOutlierFactor(n_neighbors=lof_n_neighbors,
+                                           contamination=contamination)
+    df_out['LOF']     = lof.fit_predict(X_scaled)
 
-    # 6. Autoencoder
-    # eliminate randomness (mostly, not 100 percent)
+    # 5) One-Class SVM
+    ocsvm             = OneClassSVM(nu=ocsvm_nu,
+                                    kernel=ocsvm_kernel,
+                                    gamma=ocsvm_gamma)
+    df_out['OCSVM']   = ocsvm.fit_predict(X_scaled)
+
+    # 6) DBSCAN
+    db                = DBSCAN(eps=dbscan_eps,
+                               min_samples=dbscan_min_samples)
+    df_out['DBSCAN']  = db.fit_predict(X_scaled)
+
+    # 7) Autoencoder
     np.random.seed(ae_seed)
-    tf.random.set_seed(ae_seed)
-
-    input_dim = X_scaled.shape[1]
+    tf_set_seed(ae_seed)
+    input_dim         = X_scaled.shape[1]
     ae = Sequential([
         Dense(ae_encoding_dim_1, activation='relu', input_dim=input_dim),
         Dense(ae_encoding_dim_2, activation='relu'),
@@ -524,27 +539,89 @@ def detect_outliers_all_method(df,X,
            batch_size=ae_batch_size,
            shuffle=True,
            verbose=ae_verbose)
+    recs      = ae.predict(X_scaled)
+    errors    = np.mean(np.abs(X_scaled - recs), axis=1)
+    thresh    = np.percentile(errors, 100 * (1 - contamination))
+    df_out['AE'] = np.where(errors > thresh, -1, 1)
 
-    reconstructions = ae.predict(X_scaled)
-    errors = np.mean(np.abs(X_scaled - reconstructions), axis=1)
-    threshold = np.percentile(errors, 100 * (1 - contamination))
-    df_result['Autoencoder_Outlier'] = np.where(errors > threshold, -1, 1)
+    # 8) Consensus voting
+    cols = ['ISO','LOF','OCSVM','DBSCAN','AE']
+    df_out['Votes']     = df_out[cols].apply(lambda r: list(r).count(-1), axis=1)
+    df_out['Consensus'] = df_out['Votes'].ge(2).map({True:-1, False:1})
 
-    # 7. Consensus Voting (majority or at least 2 methods vote)
-    outlier_columns = [
-        'ISO_Outlier',
-        'LOF_Outlier',
-        'OCSVM_Outlier',
-        'DBSCAN_Cluster',
-        'Autoencoder_Outlier'
-    ]
-    df_result['Outlier_Votes'] = df_result[outlier_columns].apply(lambda row: list(row).count(-1), axis=1)
-    df_result['Consensus_Outlier'] = df_result['Outlier_Votes'].apply(lambda x: -1 if x >= 2 else 1)
+    # 9) slice out only the consensus outliers
+    df_only_outliers = df_out.loc[df_out['Consensus'] == -1]
 
-    # 8. Filter only outliers
-    outliers_df = df_result[df_result['Consensus_Outlier'] == -1]
+    return df_out, df_only_outliers
 
-    return df_result, outliers_df
+#########################################################
+
+def plot_outliers(
+    df_out: pd.DataFrame,
+    outlier_vote_threshold: int,
+    method: str = 'PCA',    # 'PCA' or 'UMAP'
+    n_components: int = 2,  # 2 or 3
+    figsize: tuple = (8,6)
+):
+    flag_cols = ['ISO','LOF','OCSVM','DBSCAN','AE','Votes','Consensus']
+
+    # 2) drop flag columns and treat the rest as feature matrix
+    feature_df = df_out.drop(columns=flag_cols)
+    X = feature_df.values
+
+    # 3) dimensionality reduction
+    method = method.upper()
+    if method == 'PCA':
+        dr = PCA(n_components=n_components, random_state=42)
+    elif method == 'UMAP':
+        if umap is None:
+            raise ImportError("Please install umap-learn to use UMAP")
+        dr = umap.UMAP(n_components=n_components, random_state=42)
+    else:
+        raise ValueError("method must be 'PCA' or 'UMAP'")
+
+    X_red = dr.fit_transform(X)
+
+    # 4) mask outliers vs inliers
+    is_out = df_out['Votes'] >= outlier_vote_threshold
+
+    # 5) plot!
+    if n_components == 2:
+        plt.figure(figsize=figsize)
+        plt.scatter(X_red[~is_out,0], X_red[~is_out,1], label='Inliers', alpha=0.6)
+        plt.scatter(X_red[ is_out,0], X_red[ is_out,1], label='Outliers', alpha=0.6, color='r')
+        plt.xlabel('Component 1')
+        plt.ylabel('Component 2')
+
+    elif n_components == 3:
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(
+            X_red[~is_out,0], X_red[~is_out,1], X_red[~is_out,2],
+            label='Inliers', alpha=0.6
+        )
+        ax.scatter(
+            X_red[ is_out,0], X_red[ is_out,1], X_red[ is_out,2],
+            label='Outliers', alpha=0.6, color='r'
+        )
+        ax.set_xlabel('Component 1')
+        ax.set_ylabel('Component 2')
+        ax.set_zlabel('Component 3')
+
+    else:
+        raise ValueError("n_components must be 2 or 3")
+
+    plt.title(f"{method} projection ({n_components}D)")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+
+
+
 
 ######## Dimension Reduction Techniques ##############
 def detect_outliers_pca(df, x, n_components=2, method='percentile', threshold=95, visualize=True):
